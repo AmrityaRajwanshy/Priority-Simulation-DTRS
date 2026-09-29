@@ -1,0 +1,2614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Railway Junction 3D Simulator (Handsacre Crossover)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #090d16;
+      font-family: "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #f8fafc;
+    }
+
+    #viz, #sim-canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      overflow: hidden;
+    }
+
+    /* Fullscreen Floating HUD Overlay */
+    .sim-hud-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px 24px;
+      box-sizing: border-box;
+    }
+
+    /* Top HUD Section */
+    .sim-hud-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+      width: 100%;
+      pointer-events: none;
+    }
+
+    /* Top-Left Speedometer Card (Exact match to screenshot) */
+    .sim-card-speed {
+      background: rgba(15, 23, 42, 0.86);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(71, 85, 105, 0.65);
+      border-radius: 12px;
+      padding: 12px 18px 10px;
+      min-width: 220px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+      pointer-events: auto;
+    }
+    .sim-speed-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+    .sim-speed-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+    }
+    .sim-mps-badge {
+      background: rgba(239, 68, 68, 0.25);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .sim-speed-val-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .sim-speed-digits {
+      font-size: 42px;
+      font-weight: 800;
+      line-height: 1;
+      color: #f59e0b;
+      font-feature-settings: "tnum";
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+    .sim-speed-unit {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: 0.05em;
+    }
+    .sim-speed-tag {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #f59e0b;
+      margin-left: auto;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .sim-speed-compare-box {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(51, 65, 85, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .sim-compare-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .sim-compare-label {
+      color: #94a3b8;
+    }
+    .sim-compare-val.priority {
+      color: #38bdf8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+    .sim-compare-val.regional {
+      color: #f59e0b;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+    .sim-badge-high {
+      background: rgba(56, 189, 248, 0.2);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 8.5px;
+      font-weight: 800;
+    }
+    .sim-badge-low {
+      background: rgba(245, 158, 11, 0.2);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 8.5px;
+      font-weight: 800;
+    }
+    .sim-compare-bar-track {
+      width: 100%;
+      height: 4px;
+      background: #1e293b;
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    .sim-compare-bar-fill.priority {
+      height: 100%;
+      background: linear-gradient(90deg, #0284c7, #38bdf8);
+      border-radius: 2px;
+      transition: width 0.15s ease;
+    }
+    .sim-compare-bar-fill.regional {
+      height: 100%;
+      background: linear-gradient(90deg, #d97706, #f59e0b);
+      border-radius: 2px;
+      transition: width 0.15s ease;
+    }
+    .sim-corridor-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-top: 6px;
+      padding-top: 5px;
+      border-top: 1px solid rgba(51, 65, 85, 0.6);
+    }
+    .sim-track-progress {
+      width: 100%;
+      height: 3px;
+      background: #1e293b;
+      border-radius: 2px;
+      margin-top: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+    .sim-track-progress-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 44%;
+      background: linear-gradient(90deg, #38bdf8, #22c55e);
+      border-radius: 2px;
+    }
+
+    /* Horizon Pill below Speedometer */
+    .sim-pill-horizon {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 20px;
+      padding: 5px 12px;
+      margin-top: 8px;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #38bdf8;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      pointer-events: auto;
+    }
+
+    /* Right-Side Operations & Delay Telemetry Card (Mirrors Speedometer Card) */
+    .sim-card-alert {
+      background: rgba(15, 23, 42, 0.86);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1.5px solid #d97706;
+      border-radius: 12px;
+      padding: 12px 16px 12px;
+      width: 260px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+      pointer-events: auto;
+      margin-left: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-sizing: border-box;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .sim-alert-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sim-alert-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+    }
+    .sim-alert-badge-cycle {
+      background: rgba(56, 189, 248, 0.18);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+    .sim-alert-status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sim-alert-icon-wrap {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      background: rgba(217, 119, 6, 0.18);
+      border: 1px solid rgba(217, 119, 6, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+      transition: all 0.3s ease;
+    }
+    .sim-alert-badge {
+      font-size: 9.5px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border-radius: 5px;
+      text-transform: uppercase;
+      line-height: 1.25;
+      flex: 1;
+      display: block;
+      white-space: normal;
+    }
+    .sim-badge-warn {
+      background: #78350f;
+      color: #fde047;
+      border: 1px solid #d97706;
+    }
+    .sim-alert-delay-box {
+      border-top: 1px solid rgba(51, 65, 85, 0.6);
+      border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+      padding: 6px 0 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .sim-alert-label {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #f59e0b;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .sim-alert-val-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .sim-alert-timer {
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1;
+      color: #facc15;
+      font-feature-settings: "tnum";
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+    .sim-delay-rate-badge {
+      font-size: 9px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.03em;
+      font-feature-settings: "tnum";
+      white-space: nowrap;
+    }
+    .sim-delay-rate-badge.accumulating {
+      background: rgba(239, 68, 68, 0.25);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      animation: pulseRateRed 1.2s infinite ease-in-out;
+    }
+    .sim-delay-rate-badge.steady {
+      background: rgba(34, 197, 94, 0.18);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.35);
+    }
+    @keyframes pulseRateRed {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.04); }
+    }
+    .sim-alert-sub {
+      font-size: 9.5px;
+      color: #94a3b8;
+    }
+    .sim-alert-history-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 9px;
+      font-weight: 600;
+      color: #94a3b8;
+      background: rgba(15, 23, 42, 0.65);
+      border-radius: 5px;
+      padding: 3px 6px;
+      margin-top: 3px;
+      border: 1px solid rgba(51, 65, 85, 0.5);
+    }
+    .sim-alert-history-row strong {
+      color: #f8fafc;
+      font-weight: 700;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+    .sim-alert-footer-box {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .sim-alert-location-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .sim-alert-body {
+      font-size: 10px;
+      color: #cbd5e1;
+      line-height: 1.35;
+      font-weight: 500;
+    }
+
+    /* Left Vertical Dock */
+    .sim-dock-left {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+      border-radius: 12px;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      pointer-events: auto;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+    }
+    .sim-dock-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .sim-dock-btn svg {
+      width: 19px;
+      height: 19px;
+      display: block;
+      transition: transform 0.2s ease, stroke 0.2s ease;
+      pointer-events: none;
+    }
+    .sim-dock-btn:hover {
+      background: rgba(51, 65, 85, 0.6);
+      color: #ffffff;
+      transform: scale(1.06);
+    }
+    .sim-dock-btn:hover svg {
+      transform: scale(1.12);
+      stroke: #ffffff;
+    }
+    .sim-dock-btn.active {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
+    .sim-dock-pill-badge {
+      font-size: 8px;
+      font-weight: 800;
+      color: #38bdf8;
+      text-align: center;
+      padding: 2px 0;
+      line-height: 1.1;
+      border-top: 1px solid rgba(51, 65, 85, 0.6);
+      border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+      margin: 2px 0;
+    }
+
+    /* Right Vertical Dock */
+    .sim-dock-right {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+      border-radius: 12px;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      pointer-events: auto;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Floating Retractable Dispatcher Console */
+    .sim-dispatcher-panel {
+      position: absolute;
+      top: 114px;
+      right: 68px;
+      width: 320px;
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 14px;
+      padding: 16px 20px;
+      pointer-events: auto;
+      z-index: 50;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .sim-dispatcher-panel.collapsed {
+      opacity: 0;
+      transform: translateX(360px);
+      pointer-events: none;
+    }
+    .sim-dispatcher-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+      padding-bottom: 6px;
+    }
+    .sim-dispatcher-title {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      color: #38bdf8;
+    }
+    .sim-dispatcher-close {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .sim-control-item {
+      margin-bottom: 14px;
+    }
+    .sim-control-label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 4px;
+    }
+    .sim-slider {
+      width: 100%;
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+    .sim-btn-override {
+      width: 100%;
+      background: linear-gradient(135deg, #059669, #047857);
+      color: #ffffff;
+      border: 1px solid rgba(52, 211, 153, 0.4);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(5, 150, 105, 0.4);
+      transition: all 0.2s ease;
+    }
+    .sim-btn-override:hover {
+      background: linear-gradient(135deg, #10b981, #059669);
+      box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5);
+      transform: translateY(-1px);
+    }
+    .sim-btn-override:active {
+      transform: translateY(1px);
+    }
+
+    /* Bottom Dock (Camera Switcher & Playback) */
+    .sim-hud-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      pointer-events: auto;
+    }
+
+    /* Camera Switcher Dock (Left) */
+    .sim-cam-dock {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(71, 85, 105, 0.6);
+      border-radius: 10px;
+      padding: 5px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+    .sim-cam-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: #cbd5e1;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .sim-cam-btn:hover {
+      background: rgba(51, 65, 85, 0.5);
+      color: #ffffff;
+    }
+    .sim-cam-btn.active {
+      background: #2563eb;
+      color: #ffffff;
+      box-shadow: 0 2px 10px rgba(37, 99, 235, 0.5);
+      border-color: #3b82f6;
+    }
+
+    /* Simulation Playback Controls Dock (Right) */
+    .sim-playback-dock {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sim-playback-btn {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(71, 85, 105, 0.6);
+      color: #f8fafc;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 7px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+    }
+    .sim-playback-btn:hover {
+      background: #1e293b;
+      border-color: #94a3b8;
+    }
+    .sim-playback-btn:active {
+      transform: scale(0.97);
+    }
+    .sim-playback-btn.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+    }
+    .sim-card-speed, .sim-pill-horizon {
+      transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease;
+    }
+    .sim-card-speed.hidden, .sim-pill-horizon.hidden {
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-10px);
+      pointer-events: none;
+    }
+    .sim-dispatcher-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .sim-stat-card {
+      background: rgba(30, 41, 59, 0.55);
+      border: 1px solid rgba(51, 65, 85, 0.7);
+      border-radius: 6px;
+      padding: 6px 8px;
+    }
+    .sim-stat-lbl {
+      font-size: 8.5px;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: 0.04em;
+    }
+    .sim-stat-num {
+      font-size: 13px;
+      font-weight: 800;
+      color: #38bdf8;
+      margin-top: 2px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+    .sim-badge-power {
+      font-size: 11px;
+      font-weight: 700;
+      color: #cbd5e1;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+      padding: 7px 14px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .sim-power-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+      animation: pulseGreen 2s infinite ease-in-out;
+    }
+    @keyframes pulseGreen {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.2); }
+    }
+
+    /* Hide standard WH layout wrappers if present */
+    .widget-header, .editorial-text-panel, .controls-root {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+<div id="sim-canvas-container"></div>
+
+<!-- Fullscreen Realistic Simulator HUD -->
+<div class="sim-hud-overlay">
+  <!-- Top HUD Header -->
+  <div class="sim-hud-top">
+    <!-- Speedometer Card (Left) -->
+    <div>
+      <div class="sim-card-speed">
+        <div class="sim-speed-label-row">
+          <span class="sim-speed-title">NON-PRIORITY (REG 104)</span>
+          <span class="sim-mps-badge" id="hud-mps-badge">REG: WAITING</span>
+        </div>
+        <div class="sim-speed-val-row">
+          <span class="sim-speed-digits" id="hud-speed-val">0</span>
+          <span class="sim-speed-unit">KM/H</span>
+          <span class="sim-speed-tag" id="hud-speed-tag">WAITING AT RED SIGNAL</span>
+        </div>
+
+        <!-- Comparative Telemetry Box -->
+        <div class="sim-speed-compare-box">
+          <div class="sim-compare-row">
+            <span class="sim-compare-label">🚅 White Priority HS2:</span>
+            <span class="sim-compare-val priority" id="hud-hs2-val">210 KM/H</span>
+            <span class="sim-badge-high">HIGH SPEED</span>
+          </div>
+          <div class="sim-compare-bar-track">
+            <div class="sim-compare-bar-fill priority" id="hud-bar-hs2" style="width: 88%;"></div>
+          </div>
+          <div class="sim-compare-row" style="margin-top: 4px;">
+            <span class="sim-compare-label">🚆 Non-Priority 104:</span>
+            <span class="sim-compare-val regional" id="hud-reg-val">0 KM/H</span>
+            <span class="sim-badge-low" id="hud-reg-badge">WAITING AT SIGNAL</span>
+          </div>
+          <div class="sim-compare-bar-track">
+            <div class="sim-compare-bar-fill regional" id="hud-bar-reg" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <div class="sim-corridor-row">
+          <span>NDLS</span>
+          <span id="hud-km-mark">Km 38.4 / Turnout</span>
+          <span>HMH</span>
+        </div>
+        <div class="sim-track-progress">
+          <div class="sim-track-progress-fill" id="hud-track-progress-fill"></div>
+        </div>
+      </div>
+      <div class="sim-pill-horizon">
+        <span>🔍</span> <span>Horizon: 50 KM AHEAD</span>
+      </div>
+    </div>
+
+    <!-- Interlocking Alert Card (Right Side Dedicated Operations Panel) -->
+    <div class="sim-card-alert" id="hud-alert-card">
+      <div class="sim-alert-header-row">
+        <span class="sim-alert-title">JUNCTION INTERLOCKING</span>
+        <span class="sim-alert-badge-cycle" id="hud-pill-cycle">CYCLE #1</span>
+      </div>
+
+      <div class="sim-alert-status-row">
+        <div class="sim-alert-icon-wrap" id="hud-alert-icon">⚡</div>
+        <span class="sim-alert-badge sim-badge-warn" id="hud-pill-status">JUNCTION BLOCK ACTIVE</span>
+      </div>
+
+      <div class="sim-alert-delay-box">
+        <div class="sim-alert-label">DELAY DURATION</div>
+        <div class="sim-alert-val-row">
+          <span class="sim-alert-timer" id="hud-delay-num">00m 00s</span>
+          <span class="sim-delay-rate-badge steady" id="hud-delay-rate">0.0s/s</span>
+        </div>
+        <div class="sim-alert-sub" id="hud-delay-sub">Held at Signal HA-104</div>
+        <div class="sim-alert-history-row" id="hud-delay-history">
+          <span>AVG: <strong id="hud-avg-delay">0.0s</strong></span>
+          <span>LAST: <strong id="hud-last-delay">--</strong></span>
+          <span>MAX: <strong id="hud-max-delay">0.0s</strong></span>
+        </div>
+      </div>
+
+      <div class="sim-alert-footer-box">
+        <div class="sim-alert-location-row">
+          <span>📍</span> <span id="hud-pill-region">Handsacre Turnout (Km 38.0 → 39.2)</span>
+        </div>
+        <div class="sim-alert-body" id="hud-alert-desc">
+          Interlocking Active: High-Speed HS2 Express in junction zone. Signal HA-104 held at DANGER.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Left Vertical Toolbar Dock -->
+  <div class="sim-dock-left">
+    <button class="sim-dock-btn" id="btn-back" title="Overview Corridor View">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
+    <button class="sim-dock-btn active" id="btn-speedo" title="Speed Telemetry">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+    </button>
+    <button class="sim-dock-btn active" id="btn-headlight" title="Toggle Train Headlights">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a7.5 7.5 0 0 1 7.5-7.5v15A7.5 7.5 0 0 1 4 10Z"/><path d="M15.5 6.5 20.5 4.5"/><path d="M16 10h5"/><path d="M15.5 13.5 20.5 15.5"/></svg>
+    </button>
+    <button class="sim-dock-btn" id="btn-lighting" title="Toggle Daylight / Sunset / Night">
+      <svg id="svg-lighting-icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+    </button>
+    <div class="sim-dock-pill-badge" id="hud-dock-cycle">CYCLE<br>#1</div>
+    <button class="sim-dock-btn" id="btn-horn" title="Sound Locomotive Air Horn">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+    </button>
+    <button class="sim-dock-btn" id="btn-menu" title="Toggle Dispatcher Console">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>
+    </button>
+  </div>
+
+  <!-- Right Vertical Toolbar Dock -->
+  <div class="sim-dock-right">
+    <button class="sim-dock-btn" id="btn-toggle-drawer" title="Dispatcher Sliders & Override">⚙️</button>
+    <button class="sim-dock-btn" id="btn-weather" title="Toggle Fog & Atmosphere">☁️</button>
+    <button class="sim-dock-btn" id="btn-camera-angle" title="Switch Viewpoint">🎥</button>
+    <button class="sim-dock-btn" id="btn-track-layers" title="Signal Status">🚦</button>
+  </div>
+
+  <!-- Floating Retractable Dispatcher Console (Sliders & Override) -->
+  <div class="sim-dispatcher-panel collapsed" id="dispatcher-panel">
+    <div class="sim-dispatcher-header">
+      <span class="sim-dispatcher-title">INTERLOCKING DISPATCHER CONSOLE</span>
+      <button class="sim-dispatcher-close" id="btn-close-dispatcher">✕</button>
+    </div>
+    <div class="sim-control-item">
+      <div class="sim-control-label-row">
+        <span>Priority Train Frequency</span>
+        <span id="label-freq-val">50%</span>
+      </div>
+      <input type="range" min="0" max="100" value="50" class="sim-slider" id="slider-frequency">
+    </div>
+    <div class="sim-control-item">
+      <div class="sim-control-label-row">
+        <span>Priority Train Speed</span>
+        <span id="label-speed-val">50%</span>
+      </div>
+      <input type="range" min="0" max="100" value="50" class="sim-slider" id="slider-speed">
+    </div>
+    <div class="sim-control-item">
+      <button class="sim-btn-override" id="btn-override-signal">
+        <span>🚦</span> Allow Regional Train (Signal Override)
+      </button>
+    </div>
+    <div style="font-size: 10px; color: #94a3b8; line-height: 1.4; border-top: 1px solid rgba(51, 65, 85, 0.6); padding-top: 8px;">
+      Manual intervention locks crossover switch for Regional 104 and clears Signal HA-104 until turnout merge is completed.
+    </div>
+    <div class="sim-control-item" style="border-top: 1px solid rgba(51, 65, 85, 0.6); padding-top: 10px; margin-top: 8px; margin-bottom: 0;">
+      <div class="sim-control-label-row" style="margin-bottom: 6px;">
+        <span style="color: #38bdf8; font-weight: 700;">DYNAMIC RESULTS & ANALYTICS</span>
+        <button id="btn-clear-stats" style="background: transparent; border: none; color: #94a3b8; font-size: 9px; cursor: pointer; text-decoration: underline;">Reset Stats</button>
+      </div>
+      <div class="sim-dispatcher-stats-grid">
+        <div class="sim-stat-card">
+          <div class="sim-stat-lbl">COMPLETED RUNS</div>
+          <div class="sim-stat-num" id="stat-runs">0</div>
+        </div>
+        <div class="sim-stat-card">
+          <div class="sim-stat-lbl">AVG DELAY</div>
+          <div class="sim-stat-num" id="stat-avg">0.0s</div>
+        </div>
+        <div class="sim-stat-card">
+          <div class="sim-stat-lbl">PEAK DELAY</div>
+          <div class="sim-stat-num" id="stat-peak">0.0s</div>
+        </div>
+        <div class="sim-stat-card">
+          <div class="sim-stat-lbl">ON-TIME RATE</div>
+          <div class="sim-stat-num" id="stat-ontime">100%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Dock Toolbar -->
+  <div class="sim-hud-bottom">
+    <!-- Camera Selection Dock (Corridor Map, Hazard Front, Station View) -->
+    <div class="sim-cam-dock">
+      <button class="sim-cam-btn active" data-cam="corridor" id="cam-corridor">
+        <span>🗺️</span> Corridor Map
+      </button>
+      <button class="sim-cam-btn" data-cam="hazard" id="cam-hazard">
+        <span>☁️</span> Hazard Front
+      </button>
+      <button class="sim-cam-btn" data-cam="station" id="cam-station">
+        <span>🚉</span> Station View
+      </button>
+    </div>
+
+    <!-- Simulation Playback Controls Dock (Right) -->
+    <div class="sim-playback-dock">
+      <button class="sim-playback-btn" id="btn-pause">
+        <span id="icon-pause">⏸</span> <span id="text-pause">Pause</span>
+      </button>
+      <button class="sim-playback-btn" id="btn-reset">
+        <span>🔄</span>
+      </button>
+      <button class="sim-playback-btn active" id="btn-speed">
+        <span id="text-speed">1X</span>
+      </button>
+      <button class="sim-playback-btn" id="btn-speed-2x">
+        <span>2X</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- Core Simulation Harness Compatibility ---
+window.WH = window.WH || {
+  map: (val, in_min, in_max, out_min, out_max) => (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min,
+  createApp: (config) => {
+    const s = { frequency: 50, speed: 50, forcedGreen: false };
+    return { state: s, ui: { setEditorial: () => {} } };
+  }
+};
+
+const appInstance = WH.createApp({
+  title: "Railway Junction 3D Simulator (Handsacre Crossover)",
+  params: {
+    frequency: { value: 50, min: 0, max: 100, step: 1, label: "Priority Frequency" },
+    speed: { value: 50, min: 0, max: 100, step: 1, label: "Priority Train Speed" },
+    forceSignal: {
+      type: "button",
+      label: "Allow Regional Train (Signal Override)",
+      onClick: (s) => { s.forcedGreen = true; }
+    }
+  },
+  internal_state: {
+    regionalTrainPos: 0,
+    priorityTrainPos: -200,
+    signalState: "RED",
+    delayCounter: 0,
+    forcedGreen: false
+  },
+  sizing: { viz: { height: "100%" } },
+  editorial: {
+    hud: [
+      { label: "Regional Train (104)", value: "Approaching" },
+      { label: "Delay Duration", value: "00m 00s" }
+    ]
+  }
+});
+
+const state = appInstance.state;
+const ui = appInstance.ui || { setEditorial: () => {} };
+
+// Sync HTML Sliders with App State
+const sliderFreq = document.getElementById('slider-frequency');
+const sliderSpd = document.getElementById('slider-speed');
+const labelFreqVal = document.getElementById('label-freq-val');
+const labelSpdVal = document.getElementById('label-speed-val');
+const btnOverride = document.getElementById('btn-override-signal');
+
+function updateSliderLabels() {
+  const f = state.frequency ?? 50;
+  const s = state.speed ?? 50;
+  const freqTier = f < 35 ? "Low Headway" : f > 65 ? "High Density" : "Standard";
+  labelFreqVal.innerText = `${f}% (${freqTier})`;
+  const targetKmh = Math.round(150 + (s / 100) * 110);
+  labelSpdVal.innerText = `${s}% (${targetKmh} KM/H)`;
+}
+
+sliderFreq.oninput = (e) => {
+  state.frequency = parseInt(e.target.value);
+  updateSliderLabels();
+};
+sliderSpd.oninput = (e) => {
+  state.speed = parseInt(e.target.value);
+  updateSliderLabels();
+};
+updateSliderLabels();
+
+// Dispatcher Panel Toggle
+const dispatcherPanel = document.getElementById('dispatcher-panel');
+const toggleDispatcher = () => dispatcherPanel.classList.toggle('collapsed');
+document.getElementById('btn-toggle-drawer').onclick = toggleDispatcher;
+document.getElementById('btn-menu').onclick = toggleDispatcher;
+document.getElementById('btn-close-dispatcher').onclick = toggleDispatcher;
+
+
+// --- 3D Three.js Realistic Simulation Engine ---
+(function initRealisticSimulator() {
+  const container = document.getElementById('sim-canvas-container');
+
+  // Scene & Atmosphere
+  const scene = new THREE.Scene();
+  const skyColor = new THREE.Color(0x87ceeb);
+  scene.background = skyColor;
+  scene.fog = new THREE.FogExp2(0x87ceeb, 0.0013);
+
+  const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.5, 2500);
+  camera.position.set(-10, 5.5, -28);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer.domElement);
+
+  // OrbitControls for Free / Station Camera
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.maxPolarAngle = Math.PI / 2 - 0.02;
+  controls.enabled = false;
+
+  // 3D Lighting Setup (Bright crisp daylight matching screenshot)
+  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x556b2f, 0.95);
+  scene.add(hemiLight);
+
+  const sunLight = new THREE.DirectionalLight(0xffffff, 1.35);
+  sunLight.position.set(160, 220, 100);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.width = 2048;
+  sunLight.shadow.mapSize.height = 2048;
+  sunLight.shadow.camera.near = 10;
+  sunLight.shadow.camera.far = 600;
+  const d = 160;
+  sunLight.shadow.camera.left = -d;
+  sunLight.shadow.camera.right = d;
+  sunLight.shadow.camera.top = d;
+  sunLight.shadow.camera.bottom = -d;
+  scene.add(sunLight);
+
+  // --- Procedural 3D Environment & Landscape (Matches Screenshot) ---
+  // 1. Lush Green Rolling Pasture
+  const groundGeo = new THREE.PlaneGeometry(2500, 2500);
+  const groundMat = new THREE.MeshLambertMaterial({ color: 0x7eb048 });
+  const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+  groundMesh.rotation.x = -Math.PI / 2;
+  groundMesh.receiveShadow = true;
+  scene.add(groundMesh);
+
+  // 2. Bright Golden Yellow Canola / Wheat Field (Right side, matching screenshot)
+  const canolaGeo = new THREE.PlaneGeometry(650, 1500);
+  const canolaMat = new THREE.MeshLambertMaterial({ color: 0xfacc15 });
+  const canolaMesh = new THREE.Mesh(canolaGeo, canolaMat);
+  canolaMesh.rotation.x = -Math.PI / 2;
+  canolaMesh.position.set(360, 0.02, 60);
+  canolaMesh.receiveShadow = true;
+  scene.add(canolaMesh);
+
+  // Infrastructure & Turnout Dimensions (Adjacent Parallel Track corridor at X = 16)
+  const branchX = 16;
+  const switchStartZ = -90;
+  const switchEndZ = 70;
+  const stopSignalZ = switchStartZ - 10;
+
+  // 3. Stylized Countryside Trees
+  const treeTrunkGeo = new THREE.CylinderGeometry(0.24, 0.36, 3.2, 7);
+  const treeTrunkMat = new THREE.MeshLambertMaterial({ color: 0x3d2817 });
+  const treeCrownGeo = new THREE.SphereGeometry(2.3, 8, 8);
+  const treeCrownMat = new THREE.MeshLambertMaterial({ color: 0x22c55e });
+  const treeCrownDarkMat = new THREE.MeshLambertMaterial({ color: 0x15803d });
+
+  const treeGroup = new THREE.Group();
+  for (let i = 0; i < 110; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 36 + Math.random() * 520;
+    const tx = Math.cos(angle) * dist;
+    const tz = (Math.random() - 0.5) * 1400;
+    // Keep both mainline (X ~ 0) and branch turnout (X ~ 16) corridors clear of trees
+    if ((Math.abs(tx) < 24 || Math.abs(tx - branchX) < 14) && tz > -350 && tz < 300) continue;
+
+    const trunk = new THREE.Mesh(treeTrunkGeo, treeTrunkMat);
+    trunk.position.set(tx, 1.6, tz);
+    trunk.castShadow = true;
+
+    const crown = new THREE.Mesh(treeCrownGeo, i % 2 === 0 ? treeCrownMat : treeCrownDarkMat);
+    crown.position.set(tx, 4.4, tz);
+    crown.scale.set(1, 0.9 + Math.random() * 0.35, 1);
+    crown.castShadow = true;
+
+    treeGroup.add(trunk);
+    treeGroup.add(crown);
+  }
+  scene.add(treeGroup);
+
+  // Red Farm Barn with White Roof
+  const houseMat = new THREE.MeshLambertMaterial({ color: 0xb91c1c });
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+  [
+    { x: 130, z: -160 },
+    { x: 180, z: 250 },
+    { x: -150, z: -70 }
+  ].forEach(pos => {
+    const house = new THREE.Mesh(new THREE.BoxGeometry(8, 4.5, 10), houseMat);
+    house.position.set(pos.x, 2.25, pos.z);
+    house.castShadow = true;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(6.5, 3.2, 4), roofMat);
+    roof.position.set(pos.x, 6.0, pos.z);
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
+    scene.add(house);
+    scene.add(roof);
+  });
+
+  // --- Dual Track Railway Infrastructure & Handsacre Crossover ---
+  const trackZMin = -800;
+  const trackZMax = 800;
+  const sleeperSpacing = 2.4;
+  const railGauge = 2.2;
+
+  const ballastMat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 });
+  const sleeperMat = new THREE.MeshLambertMaterial({ color: 0xe2e8f0 });
+  const railMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.85, roughness: 0.25 });
+  const catenaryPoleMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.6, roughness: 0.5 });
+  const wireMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+
+  // Mainline Ballast & Steel Rails
+  const mainBallast = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.35, trackZMax - trackZMin), ballastMat);
+  mainBallast.position.set(0, 0.175, 0);
+  mainBallast.receiveShadow = true;
+  scene.add(mainBallast);
+
+  const mainRailL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, trackZMax - trackZMin), railMat);
+  mainRailL.position.set(-railGauge / 2, 0.46, 0);
+  mainRailL.castShadow = true;
+  scene.add(mainRailL);
+
+  const mainRailR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, trackZMax - trackZMin), railMat);
+  mainRailR.position.set(railGauge / 2, 0.46, 0);
+  mainRailR.castShadow = true;
+  scene.add(mainRailR);
+
+  // Concrete Sleepers along Mainline
+  const sleeperGeo = new THREE.BoxGeometry(3.6, 0.16, 0.42);
+  const sleeperGroup = new THREE.Group();
+  for (let z = trackZMin; z <= trackZMax; z += sleeperSpacing) {
+    const sleeper = new THREE.Mesh(sleeperGeo, sleeperMat);
+    sleeper.position.set(0, 0.36, z);
+    sleeper.receiveShadow = true;
+    sleeperGroup.add(sleeper);
+  }
+  scene.add(sleeperGroup);
+
+  // Branch Line Smooth S-Curve Turnout
+  function getBranchPose(z) {
+    if (z < switchStartZ) {
+      return { x: branchX, y: 0, z: z, angle: 0 };
+    } else if (z <= switchEndZ) {
+      const u = (z - switchStartZ) / (switchEndZ - switchStartZ);
+      const smoothU = 0.5 - 0.5 * Math.cos(u * Math.PI);
+      const x = branchX * (1 - smoothU);
+      const dSmooth = 0.5 * Math.PI * Math.sin(u * Math.PI) / (switchEndZ - switchStartZ);
+      const dx_dz = -branchX * dSmooth;
+      const angle = Math.atan(dx_dz);
+      return { x: x, y: 0, z: z, angle: angle };
+    } else {
+      return { x: 0, y: 0, z: z, angle: 0 };
+    }
+  }
+
+  // Branch Sleepers
+  const branchSleeperGroup = new THREE.Group();
+  for (let z = trackZMin; z <= switchEndZ + 40; z += sleeperSpacing) {
+    const pose = getBranchPose(z);
+    if (z > switchStartZ && pose.x < 2.5) continue;
+    const sleeper = new THREE.Mesh(sleeperGeo, sleeperMat);
+    sleeper.position.set(pose.x, 0.36, pose.z);
+    sleeper.rotation.y = pose.angle;
+    sleeper.receiveShadow = true;
+    branchSleeperGroup.add(sleeper);
+  }
+  scene.add(branchSleeperGroup);
+
+  // Straight Section Ballast for Branch
+  const branchBallast = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.35, switchStartZ - trackZMin), ballastMat);
+  branchBallast.position.set(branchX, 0.175, (trackZMin + switchStartZ) / 2);
+  branchBallast.receiveShadow = true;
+  scene.add(branchBallast);
+
+  // Parallel Branch Steel Rails (Straight approach section)
+  const bLen = switchStartZ - trackZMin;
+  const bMidZ = (trackZMin + switchStartZ) / 2;
+  const bRailL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, bLen), railMat);
+  bRailL.position.set(branchX - railGauge / 2, 0.46, bMidZ);
+  bRailL.castShadow = true;
+  scene.add(bRailL);
+
+  const bRailR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, bLen), railMat);
+  bRailR.position.set(branchX + railGauge / 2, 0.46, bMidZ);
+  bRailR.castShadow = true;
+  scene.add(bRailR);
+
+  // Turnout Crossover Curved Steel Rails
+  for (let rz = switchStartZ; rz < switchEndZ; rz += 2.0) {
+    const p1 = getBranchPose(rz);
+    const p2 = getBranchPose(Math.min(switchEndZ, rz + 2.0));
+    const segLen = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+    const midX = (p1.x + p2.x) / 2;
+    const midZ = (p1.z + p2.z) / 2;
+    const ang = p1.angle;
+
+    const rL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, segLen + 0.1), railMat);
+    rL.position.set(midX - (railGauge / 2) * Math.cos(ang), 0.46, midZ + (railGauge / 2) * Math.sin(ang));
+    rL.rotation.y = ang;
+    rL.castShadow = true;
+    scene.add(rL);
+
+    const rR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, segLen + 0.1), railMat);
+    rR.position.set(midX + (railGauge / 2) * Math.cos(ang), 0.46, midZ - (railGauge / 2) * Math.sin(ang));
+    rR.rotation.y = ang;
+    rR.castShadow = true;
+    scene.add(rR);
+  }
+
+  // Animated 3D Switch Blades
+  const switchGroup = new THREE.Group();
+  const bladeGeo = new THREE.BoxGeometry(0.12, 0.22, 14);
+  const switchBlade = new THREE.Mesh(bladeGeo, railMat);
+  switchBlade.position.set(railGauge / 2 - 0.08, 0.46, switchStartZ + 7);
+  switchGroup.add(switchBlade);
+
+  const pointMotor = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.45, 1.2), new THREE.MeshLambertMaterial({ color: 0x0284c7 }));
+  pointMotor.position.set(railGauge / 2 + 1.4, 0.4, switchStartZ + 4);
+  switchGroup.add(pointMotor);
+  scene.add(switchGroup);
+
+  // Overhead Catenary Gantries (Electrification Masts & Wires)
+  const catenaryGroup = new THREE.Group();
+  const mastGeo = new THREE.BoxGeometry(0.25, 7.8, 0.25);
+  const crossarmGeo = new THREE.BoxGeometry(railGauge + 3.2, 0.2, 0.2);
+
+  for (let cz = trackZMin; cz <= trackZMax; cz += 42) {
+    const mast = new THREE.Mesh(mastGeo, catenaryPoleMat);
+    mast.position.set(-railGauge / 2 - 1.8, 3.9, cz);
+    mast.castShadow = true;
+    catenaryGroup.add(mast);
+
+    const arm = new THREE.Mesh(crossarmGeo, catenaryPoleMat);
+    arm.position.set(0, 7.2, cz);
+    catenaryGroup.add(arm);
+
+    const ins = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.7, 8), new THREE.MeshLambertMaterial({ color: 0xd97706 }));
+    ins.position.set(0, 6.75, cz);
+    catenaryGroup.add(ins);
+  }
+  scene.add(catenaryGroup);
+
+  // Catenary Contact Wire & Messenger Wire stretching to horizon
+  const contactWire = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, trackZMax - trackZMin, 6), wireMat);
+  contactWire.rotation.x = Math.PI / 2;
+  contactWire.position.set(0, 6.35, 0);
+  scene.add(contactWire);
+
+  const messengerWire = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, trackZMax - trackZMin, 6), wireMat);
+  messengerWire.rotation.x = Math.PI / 2;
+  messengerWire.position.set(0, 7.15, 0);
+  scene.add(messengerWire);
+
+  // 3D Signal Mast HA-104 with Optical Lenses
+  const signalGroup = new THREE.Group();
+  const sigPost = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 6.5, 12), catenaryPoleMat);
+  sigPost.position.set(branchX + 2.8, 3.25, switchStartZ - 10);
+  signalGroup.add(sigPost);
+
+  const sigHead = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.8, 0.4), new THREE.MeshLambertMaterial({ color: 0x0f172a }));
+  sigHead.position.set(branchX + 2.8, 5.4, switchStartZ - 10);
+  signalGroup.add(sigHead);
+
+  const redLensMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+  const redLens = new THREE.Mesh(new THREE.CircleGeometry(0.2, 16), redLensMat);
+  redLens.position.set(branchX + 2.8, 5.8, switchStartZ - 9.79);
+  signalGroup.add(redLens);
+
+  const greenLensMat = new THREE.MeshBasicMaterial({ color: 0x052e16 });
+  const greenLens = new THREE.Mesh(new THREE.CircleGeometry(0.2, 16), greenLensMat);
+  greenLens.position.set(branchX + 2.8, 5.0, switchStartZ - 9.79);
+  signalGroup.add(greenLens);
+
+  const signalLight = new THREE.PointLight(0xef4444, 2.8, 35);
+  signalLight.position.set(branchX + 2.8, 5.4, switchStartZ - 9.5);
+  signalGroup.add(signalLight);
+  scene.add(signalGroup);
+
+  // =========================================================================
+  // --- REALISTIC AUTHENTIC RAILWAY ROLLING STOCK 3D MODELS ---
+  // =========================================================================
+
+  // Shared Train Construction Materials
+  const steelWheelMat = new THREE.MeshStandardMaterial({
+    color: 0x64748b,
+    metalness: 0.88,
+    roughness: 0.2
+  });
+  const bogieFrameMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    metalness: 0.6,
+    roughness: 0.5
+  });
+  const darkGlassMat = new THREE.MeshStandardMaterial({
+    color: 0x020617,
+    roughness: 0.05,
+    metalness: 0.95
+  });
+  const tintedWinMat = new THREE.MeshStandardMaterial({
+    color: 0x0f172a,
+    roughness: 0.1,
+    metalness: 0.85
+  });
+  const bellowsMat = new THREE.MeshLambertMaterial({
+    color: 0x090d16
+  });
+  const underframeMat = new THREE.MeshLambertMaterial({
+    color: 0x0f172a
+  });
+  const headlightBeamMat = new THREE.MeshBasicMaterial({
+    color: 0xfffbeb
+  });
+  const tailLightMat = new THREE.MeshBasicMaterial({
+    color: 0xef4444
+  });
+
+  // Reusable Authentic Railway 2-Axle Bogie (Truck) with Flanged Steel Wheels
+  function createRealisticBogie() {
+    const bogie = new THREE.Group();
+
+    // Heavy Cast Steel Sideframes & Transom
+    const sideframeGeo = new THREE.BoxGeometry(0.2, 0.32, 2.6);
+    const leftSide = new THREE.Mesh(sideframeGeo, bogieFrameMat);
+    leftSide.position.set(-1.18, 0.48, 0);
+    bogie.add(leftSide);
+
+    const rightSide = new THREE.Mesh(sideframeGeo, bogieFrameMat);
+    rightSide.position.set(1.18, 0.48, 0);
+    bogie.add(rightSide);
+
+    const transom = new THREE.Mesh(new THREE.BoxGeometry(2.36, 0.25, 0.45), bogieFrameMat);
+    transom.position.set(0, 0.55, 0);
+    bogie.add(transom);
+
+    // Center Bolster & Air Suspension Bellows
+    [-0.75, 0.75].forEach(bx => {
+      const airBellow = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.22, 12), bellowsMat);
+      airBellow.position.set(bx, 0.7, 0);
+      bogie.add(airBellow);
+    });
+
+    // 2 Axles with 4 Steel Flanged Train Wheels
+    const wheelRadius = 0.46;
+    const treadGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.12, 16);
+    const flangeGeo = new THREE.CylinderGeometry(wheelRadius + 0.05, wheelRadius + 0.05, 0.035, 16);
+    const axleGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.2, 10);
+    const discBrakeGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.06, 12);
+    const brakeMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.9, roughness: 0.3 });
+
+    [-0.92, 0.92].forEach(az => {
+      // Steel Axle
+      const axle = new THREE.Mesh(axleGeo, steelWheelMat);
+      axle.rotation.z = Math.PI / 2;
+      axle.position.set(0, wheelRadius, az);
+      bogie.add(axle);
+
+      // Disc Brake on axle
+      const disc = new THREE.Mesh(discBrakeGeo, brakeMat);
+      disc.rotation.z = Math.PI / 2;
+      disc.position.set(0.2, wheelRadius, az);
+      bogie.add(disc);
+
+      // Left & Right Wheels with inside flange
+      [-1.12, 1.12].forEach(wx => {
+        const isLeft = wx < 0;
+        const wheelGroup = new THREE.Group();
+
+        // Main cylindrical tread
+        const tread = new THREE.Mesh(treadGeo, steelWheelMat);
+        tread.rotation.z = Math.PI / 2;
+        wheelGroup.add(tread);
+
+        // Inside safety flange
+        const flange = new THREE.Mesh(flangeGeo, steelWheelMat);
+        flange.rotation.z = Math.PI / 2;
+        flange.position.x = isLeft ? 0.065 : -0.065;
+        wheelGroup.add(flange);
+
+        // Center hub cap
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.16, 12), bogieFrameMat);
+        hub.rotation.z = Math.PI / 2;
+        hub.position.x = isLeft ? -0.06 : 0.06;
+        wheelGroup.add(hub);
+
+        wheelGroup.position.set(wx, wheelRadius, az);
+        bogie.add(wheelGroup);
+
+        // Primary coil spring over journal box
+        const spring = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.28, 8), steelWheelMat);
+        spring.position.set(isLeft ? -1.18 : 1.18, wheelRadius + 0.22, az);
+        bogie.add(spring);
+      });
+    });
+
+    return bogie;
+  }
+
+  // Coupler Mechanism (Dellner / Scharfenberg Automatic Train Coupler)
+  function createTrainCoupler() {
+    const coupler = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.9), bogieFrameMat);
+    shaft.position.z = 0.45;
+    coupler.add(shaft);
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.32, 0.35), bogieFrameMat);
+    head.position.z = 0.95;
+    coupler.add(head);
+
+    const horn = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.2, 8), steelWheelMat);
+    horn.rotation.x = Math.PI / 2;
+    horn.position.set(0.12, 0, 1.12);
+    coupler.add(horn);
+
+    return coupler;
+  }
+
+  // -------------------------------------------------------------------------
+  // 1. High-Speed Priority Train (HS2 Express 3-Car Bullet Train Streamliner)
+  // -------------------------------------------------------------------------
+  const hs2Group = new THREE.Group();
+
+  function createStreamlineBulletCar(isLead = true, isRear = false) {
+    const car = new THREE.Group();
+    const length = 20.0;
+    const width = 3.04;
+    const height = 3.35;
+
+    // Body Materials
+    const pearlWhiteMat = new THREE.MeshStandardMaterial({
+      color: 0xf8fafc,
+      roughness: 0.16,
+      metalness: 0.22
+    });
+    const charcoalSkirtsMat = new THREE.MeshLambertMaterial({
+      color: 0x0f172a
+    });
+    const hs2CyanMat = new THREE.MeshLambertMaterial({
+      color: 0x0284c7 // Electric High-Speed Cyan livery stripe
+    });
+    const hs2RedMat = new THREE.MeshLambertMaterial({
+      color: 0xdc2626 // Crimson accent pinstripe
+    });
+
+    // Main Passenger Coach Body Shell
+    const mainBody = new THREE.Mesh(new THREE.BoxGeometry(width, height - 0.4, length), pearlWhiteMat);
+    mainBody.position.y = 2.05;
+    mainBody.castShadow = true;
+    mainBody.receiveShadow = true;
+    car.add(mainBody);
+
+    // Beveled Curved Aerodynamic Roof Vault
+    const roofVault = new THREE.Mesh(new THREE.CylinderGeometry(width / 2, width / 2, length, 24, 1, false, 0, Math.PI), pearlWhiteMat);
+    roofVault.rotation.z = Math.PI / 2;
+    roofVault.rotation.y = Math.PI / 2;
+    roofVault.position.set(0, 2.05 + (height - 0.4) / 2, 0);
+    roofVault.scale.set(0.42, 1, 1);
+    roofVault.castShadow = true;
+    car.add(roofVault);
+
+    // Aerodynamic Chassis Skirts with bogie cutouts
+    const skirtHeight = 0.72;
+    const skirtGeo = new THREE.BoxGeometry(width + 0.02, skirtHeight, length);
+    const skirt = new THREE.Mesh(skirtGeo, charcoalSkirtsMat);
+    skirt.position.y = 0.88;
+    car.add(skirt);
+
+    // High-Speed Aerodynamic Livery Bands along flanks
+    const speedRibbon = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.4, length - 0.1), hs2CyanMat);
+    speedRibbon.position.y = 1.62;
+    car.add(speedRibbon);
+
+    const redPinstripe = new THREE.Mesh(new THREE.BoxGeometry(width + 0.05, 0.08, length - 0.1), hs2RedMat);
+    redPinstripe.position.y = 1.38;
+    car.add(redPinstripe);
+
+    // Continuous Flush-Glazed Dark Tinted Window Ribbon
+    const windowRibbonGeo = new THREE.BoxGeometry(width + 0.06, 0.78, length - 4.2);
+    const windowRibbon = new THREE.Mesh(windowRibbonGeo, darkGlassMat);
+    windowRibbon.position.y = 2.48;
+    car.add(windowRibbon);
+
+    // Individual Window Glazing Dividers (Simulating real passenger bays)
+    const dividerMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+    for (let wz = -6.8; wz <= 6.8; wz += 1.9) {
+      const divL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.8, 0.12), dividerMat);
+      divL.position.set(-width / 2 - 0.035, 2.48, wz);
+      car.add(divL);
+      const divR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.8, 0.12), dividerMat);
+      divR.position.set(width / 2 + 0.035, 2.48, wz);
+      car.add(divR);
+    }
+
+    // Passenger Plug Doors with yellow accessibility edge
+    [-8.2, 8.2].forEach(dz => {
+      [-width / 2 - 0.03, width / 2 + 0.03].forEach(dx => {
+        const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.1, 1.25), charcoalSkirtsMat);
+        doorFrame.position.set(dx, 2.05, dz);
+        car.add(doorFrame);
+
+        const doorGlass = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.75, 0.45), darkGlassMat);
+        doorGlass.position.set(dx, 2.5, dz);
+        car.add(doorGlass);
+      });
+    });
+
+    // Inter-car Gangway Accordion Bellows (at both ends or rear)
+    [-length / 2 - 0.3, length / 2 + 0.3].forEach((gz, idx) => {
+      if ((idx === 0 && !isRear) || (idx === 1 && !isLead)) {
+        const bellows = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3.1, 0.65), bellowsMat);
+        bellows.position.set(0, 2.1, gz);
+        car.add(bellows);
+
+        const coupler = createTrainCoupler();
+        coupler.position.set(0, 0.62, gz);
+        if (idx === 0) coupler.rotation.y = Math.PI;
+        car.add(coupler);
+      }
+    });
+
+    // Aerodynamic Sculpted Bullet Nose (Leading & Trailing Driving Cars)
+    if (isLead || isRear) {
+      const dir = isLead ? 1 : -1;
+      const noseRootZ = (length / 2) * dir;
+      const noseGroup = new THREE.Group();
+      noseGroup.position.set(0, 0, noseRootZ);
+
+      // 1. Lower Swept Chin / Obstacle Deflector
+      const chinGeo = new THREE.BoxGeometry(2.88, 0.68, 3.8);
+      const chin = new THREE.Mesh(chinGeo, charcoalSkirtsMat);
+      chin.position.set(0, 0.86, dir * 1.8);
+      chin.scale.set(0.9, 1, 1);
+      noseGroup.add(chin);
+
+      // 2. Sculpted Aerodynamic Duck-bill Bonnet (Tapered Wedge)
+      const wedgeGeo = new THREE.BoxGeometry(2.96, 2.1, 4.2);
+      const wedge = new THREE.Mesh(wedgeGeo, pearlWhiteMat);
+      wedge.position.set(0, 1.85, dir * 1.95);
+      wedge.rotation.x = dir * -0.22;
+      wedge.castShadow = true;
+      noseGroup.add(wedge);
+
+      // 3. Smooth Aerodynamic Front Taper Dome
+      const tipGeo = new THREE.SphereGeometry(1.42, 20, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+      const tip = new THREE.Mesh(tipGeo, pearlWhiteMat);
+      tip.rotation.x = dir * Math.PI / 2;
+      tip.position.set(0, 1.48, dir * 4.0);
+      tip.scale.set(0.95, 1.4, 0.7);
+      tip.castShadow = true;
+      noseGroup.add(tip);
+
+      // 4. Wrap-Around High-Gloss Tinted Cockpit Windshield Canopy
+      const cockpitGeo = new THREE.BoxGeometry(2.4, 0.95, 2.4);
+      const cockpit = new THREE.Mesh(cockpitGeo, darkGlassMat);
+      cockpit.position.set(0, 2.78, dir * 1.6);
+      cockpit.rotation.x = dir * -0.36;
+      noseGroup.add(cockpit);
+
+      // Black Aerodynamic Cockpit Mask
+      const maskGeo = new THREE.BoxGeometry(2.55, 0.72, 2.8);
+      const mask = new THREE.Mesh(maskGeo, charcoalSkirtsMat);
+      mask.position.set(0, 2.52, dir * 2.1);
+      mask.rotation.x = dir * -0.34;
+      noseGroup.add(mask);
+
+      // Emergency Front Coupler Hatch Cover
+      const hatch = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.45, 0.1), charcoalSkirtsMat);
+      hatch.position.set(0, 0.92, dir * 4.45);
+      noseGroup.add(hatch);
+
+      // Headlight / Taillight Clusters
+      [-0.88, 0.88].forEach(hx => {
+        if (isLead) {
+          // Dual High-Intensity LED Projector Headlamps
+          const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.08, 12), headlightBeamMat);
+          hl.rotation.x = Math.PI / 2;
+          hl.position.set(hx, 1.25, 4.3);
+          noseGroup.add(hl);
+
+          // Ditch lights in lower bumper
+          const ditch = new THREE.Mesh(new THREE.CircleGeometry(0.1, 8), headlightBeamMat);
+          ditch.position.set(hx * 0.65, 0.78, 4.35);
+          noseGroup.add(ditch);
+        } else {
+          // Ruby Red Taillights on Rear Car
+          const tl = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.08, 12), tailLightMat);
+          tl.rotation.x = -Math.PI / 2;
+          tl.position.set(hx, 1.25, -4.3);
+          noseGroup.add(tl);
+        }
+      });
+
+      car.add(noseGroup);
+    }
+
+    // Roof Streamlined HVAC Fairings
+    [-4.5, 4.5].forEach(rz => {
+      const hvac = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.28, 3.4), charcoalSkirtsMat);
+      hvac.position.set(0, 3.65, rz);
+      car.add(hvac);
+    });
+
+    // 2 Authentic High-Speed Bogies with Flanged Steel Wheels
+    const frontBogie = createRealisticBogie();
+    frontBogie.position.set(0, 0, 5.8);
+    car.add(frontBogie);
+
+    const rearBogie = createRealisticBogie();
+    rearBogie.position.set(0, 0, -5.8);
+    car.add(rearBogie);
+
+    return car;
+  }
+
+  const hs2Lead = createStreamlineBulletCar(true, false);
+  const hs2Coach = createStreamlineBulletCar(false, false);
+  const hs2Rear = createStreamlineBulletCar(false, true);
+
+  // High-Speed Articulated Z-Arm Pantograph on Intermediate Coach
+  const pantoGroup = new THREE.Group();
+  pantoGroup.position.set(0, 3.62, 1.5);
+
+  // 4 Ceramic High-Voltage Insulators
+  const insulMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.3, metalness: 0.2 });
+  [-0.6, 0.6].forEach(ix => {
+    [-0.7, 0.7].forEach(iz => {
+      const ins = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.25, 8), insulMat);
+      ins.position.set(ix, 0.12, iz);
+      pantoGroup.add(ins);
+    });
+  });
+
+  const pantoBase = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 1.7), bogieFrameMat);
+  pantoBase.position.y = 0.26;
+  pantoGroup.add(pantoBase);
+
+  // Lower Articulated Arm
+  const pantoArmMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.85, roughness: 0.25 });
+  const pantoLower = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 2.6, 8), pantoArmMat);
+  pantoLower.position.set(0, 1.35, 0.85);
+  pantoLower.rotation.x = 0.58;
+  pantoGroup.add(pantoLower);
+
+  // Upper Reach Arm
+  const pantoUpper = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 2.6, 8), pantoArmMat);
+  pantoUpper.position.set(0, 2.35, -0.2);
+  pantoUpper.rotation.x = -0.62;
+  pantoGroup.add(pantoUpper);
+
+  // Double Carbon Collector Contact Strip (Touching Catenary Wire)
+  const collectorHead = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.06, 0.32), darkGlassMat);
+  collectorHead.position.set(0, 3.22, -0.9);
+  pantoGroup.add(collectorHead);
+
+  // Carbon Contact Strips
+  [-0.08, 0.08].forEach(cz => {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.04, 0.06), steelWheelMat);
+    strip.position.set(0, 3.26, -0.9 + cz);
+    pantoGroup.add(strip);
+  });
+
+  hs2Coach.add(pantoGroup);
+
+  hs2Lead.position.z = 21.2;
+  hs2Coach.position.z = 0;
+  hs2Rear.position.z = -21.2;
+
+  hs2Group.add(hs2Lead);
+  hs2Group.add(hs2Coach);
+  hs2Group.add(hs2Rear);
+
+  // Forward Track Illumination SpotLight Beam
+  const hs2SpotLight = new THREE.SpotLight(0xfffbeb, 5.0, 170, Math.PI / 7, 0.35, 1.1);
+  hs2SpotLight.position.set(0, 1.8, 16);
+  const hs2Target = new THREE.Object3D();
+  hs2Target.position.set(0, 0.3, 80);
+  hs2Group.add(hs2SpotLight);
+  hs2Group.add(hs2Target);
+  hs2SpotLight.target = hs2Target;
+
+  scene.add(hs2Group);
+
+  // -------------------------------------------------------------------------
+  // 2. Regional Passenger Train (British Rail Class 104 Commuter DMU 2-Car Set)
+  // -------------------------------------------------------------------------
+  const regGroup = new THREE.Group();
+
+  function createRegionalCar(isLead = true) {
+    const car = new THREE.Group();
+    const length = 17.8;
+    const width = 2.92;
+    const height = 3.3;
+
+    // Authentic British Rail Commuter DMU Livery Materials
+    const brGreenMat = new THREE.MeshStandardMaterial({
+      color: 0x064e3b, // British Rail Brunswick / Emerald Green
+      roughness: 0.28,
+      metalness: 0.15
+    });
+    const warningYellowMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15, // High-Visibility Warning Yellow Cab Face
+      roughness: 0.3,
+      metalness: 0.1
+    });
+    const whiteStripeMat = new THREE.MeshLambertMaterial({
+      color: 0xf8fafc
+    });
+    const silverFrameMat = new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      metalness: 0.7,
+      roughness: 0.3
+    });
+
+    // Main Commuter Coach Car Body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(width, height - 0.45, length), brGreenMat);
+    body.position.y = 2.05;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    car.add(body);
+
+    // Arched Commuter Roof
+    const roof = new THREE.Mesh(new THREE.CylinderGeometry(width / 2, width / 2, length, 20, 1, false, 0, Math.PI), brGreenMat);
+    roof.rotation.z = Math.PI / 2;
+    roof.rotation.y = Math.PI / 2;
+    roof.position.set(0, 2.05 + (height - 0.45) / 2, 0);
+    roof.scale.set(0.38, 1, 1);
+    roof.castShadow = true;
+    car.add(roof);
+
+    // Silver / White Waistline Lining
+    const lining = new THREE.Mesh(new THREE.BoxGeometry(width + 0.03, 0.12, length - 0.1), whiteStripeMat);
+    lining.position.y = 1.62;
+    car.add(lining);
+
+    // Dark Lower Chassis Solebar
+    const solebar = new THREE.Mesh(new THREE.BoxGeometry(width + 0.02, 0.48, length), underframeMat);
+    solebar.position.y = 0.96;
+    car.add(solebar);
+
+    // Realistic Individual Passenger Windows with Aluminum Bezels
+    for (let wz = -5.8; wz <= 5.8; wz += 1.95) {
+      [-width / 2 - 0.02, width / 2 + 0.02].forEach(wx => {
+        // Silver window surround frame
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.86, 1.36), silverFrameMat);
+        frame.position.set(wx, 2.45, wz);
+        car.add(frame);
+
+        // Tinted passenger glass
+        const glass = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.74, 1.24), tintedWinMat);
+        glass.position.set(wx, 2.45, wz);
+        car.add(glass);
+      });
+    }
+
+    // Commuter Passenger Entrance Doors with Stepwell
+    [-7.2, 7.2].forEach(dz => {
+      [-width / 2 - 0.02, width / 2 + 0.02].forEach(dx => {
+        const door = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2.0, 1.2), brGreenMat);
+        door.position.set(dx, 1.95, dz);
+        car.add(door);
+
+        const doorWin = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.65, 0.42), tintedWinMat);
+        doorWin.position.set(dx, 2.35, dz);
+        car.add(doorWin);
+
+        // Yellow passenger door caution line
+        const doorStripe = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 1.18), warningYellowMat);
+        doorStripe.position.set(dx, 1.05, dz);
+        car.add(doorStripe);
+      });
+    });
+
+    // Realistic Commuter Underfloor Heavy Equipment Package
+    const underGroup = new THREE.Group();
+    underGroup.position.set(0, 0.65, 0);
+
+    // 1. Diesel Engine & Alternator Casing
+    const engine = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.55, 3.2), underframeMat);
+    engine.position.set(0, 0, 1.6);
+    underGroup.add(engine);
+
+    // 2. Corrugated Heavy Fuel Tank
+    const fuelTank = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.58, 2.4), new THREE.MeshLambertMaterial({ color: 0x1e293b }));
+    fuelTank.position.set(0, 0, -1.8);
+    underGroup.add(fuelTank);
+
+    // 3. Dual Cylindrical Compressed Air Reservoirs
+    [-0.6, 0.6].forEach(ax => {
+      const airTank = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.8, 12), steelWheelMat);
+      airTank.rotation.x = Math.PI / 2;
+      airTank.position.set(ax, -0.05, 0);
+      underGroup.add(airTank);
+    });
+
+    // 4. Battery & Electrical Equipment Boxes
+    const battBox = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.42, 1.4), underframeMat);
+    battBox.position.set(0, 0, -3.8);
+    underGroup.add(battBox);
+
+    car.add(underGroup);
+
+    // Roof-Mounted Dual Air Conditioning Units & Exhaust Flues
+    [-4.0, 4.0].forEach(rz => {
+      const acUnit = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.28, 2.6), underframeMat);
+      acUnit.position.set(0, 3.55, rz);
+      car.add(acUnit);
+
+      // Diesel Exhaust Flue Pipe
+      const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.45, 8), bogieFrameMat);
+      exhaust.position.set(0.65, 3.75, rz + 1.2);
+      car.add(exhaust);
+    });
+
+    // Inter-car Gangway Accordion Bellows & Coupling Gear
+    const gangwayZ = -length / 2;
+    const bellows = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.9, 0.65), bellowsMat);
+    bellows.position.set(0, 2.05, gangwayZ);
+    car.add(bellows);
+
+    const interCoupler = createTrainCoupler();
+    interCoupler.position.set(0, 0.62, gangwayZ);
+    interCoupler.rotation.y = Math.PI;
+    car.add(interCoupler);
+
+    // Driver's Cab Front End (Warning Yellow Face + Headlights + Coupler)
+    if (isLead) {
+      const cabZ = length / 2;
+      const cabGroup = new THREE.Group();
+      cabGroup.position.set(0, 0, cabZ);
+
+      // 1. High-Visibility Warning Yellow Front Face
+      const yellowFace = new THREE.Mesh(new THREE.BoxGeometry(width + 0.02, height - 0.45, 1.2), warningYellowMat);
+      yellowFace.position.set(0, 2.05, 0.55);
+      cabGroup.add(yellowFace);
+
+      // Beveled Cab Nose Cap
+      const noseCap = new THREE.Mesh(new THREE.CylinderGeometry(width / 2, width / 2, 1.2, 20, 1, false, 0, Math.PI), warningYellowMat);
+      noseCap.rotation.z = Math.PI / 2;
+      noseCap.rotation.y = Math.PI / 2;
+      noseCap.position.set(0, 2.05 + (height - 0.45) / 2, 0.55);
+      noseCap.scale.set(0.38, 1, 1);
+      cabGroup.add(noseCap);
+
+      // Matte Black Anti-Glare Glare Shield under windshield
+      const antiGlare = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.15, 0.6), underframeMat);
+      antiGlare.position.set(0, 2.15, 0.95);
+      cabGroup.add(antiGlare);
+
+      // 2. 3-Piece Commuter Driver Windshield with Center Pillar
+      [-0.65, 0.65].forEach(wx => {
+        const cabGlass = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.78, 0.08), darkGlassMat);
+        cabGlass.position.set(wx, 2.65, 1.16);
+        cabGroup.add(cabGlass);
+
+        // Windshield Wiper
+        const wiper = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.45, 0.04), bogieFrameMat);
+        wiper.position.set(wx + 0.15, 2.65, 1.21);
+        wiper.rotation.z = -0.35;
+        cabGroup.add(wiper);
+      });
+
+      // Center Pillar
+      const centerPillar = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.82, 0.1), warningYellowMat);
+      centerPillar.position.set(0, 2.65, 1.16);
+      cabGroup.add(centerPillar);
+
+      // 3. Illuminated Electronic Destination Indicator Display
+      const destBox = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.28, 0.08), underframeMat);
+      destBox.position.set(0, 3.25, 1.14);
+      cabGroup.add(destBox);
+
+      const destText = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.2, 0.09), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
+      destText.position.set(0, 3.25, 1.15);
+      cabGroup.add(destText);
+
+      // 4. Heavy Steel Buffer Beam & Pilot Cowcatcher
+      const bufferBeam = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.35, 0.25), underframeMat);
+      bufferBeam.position.set(0, 0.75, 1.15);
+      cabGroup.add(bufferBeam);
+
+      const cowcatcher = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.32, 0.4), underframeMat);
+      cowcatcher.position.set(0, 0.42, 1.25);
+      cowcatcher.rotation.x = -0.3;
+      cabGroup.add(cowcatcher);
+
+      // Automatic Front Coupler
+      const frontCoupler = createTrainCoupler();
+      frontCoupler.position.set(0, 0.62, 1.15);
+      cabGroup.add(frontCoupler);
+
+      // 5. 3-Point Light Cluster (Twin Lower Headlamps + Top Marker + Red Taillights)
+      [-0.85, 0.85].forEach(hx => {
+        // Main high-intensity headlight
+        const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 12), headlightBeamMat);
+        hl.rotation.x = Math.PI / 2;
+        hl.position.set(hx, 1.45, 1.18);
+        cabGroup.add(hl);
+
+        // Lower red marker lamp
+        const rl = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.08, 10), tailLightMat);
+        rl.rotation.x = Math.PI / 2;
+        rl.position.set(hx * 0.6, 1.45, 1.18);
+        cabGroup.add(rl);
+      });
+
+      // Top Center Headlamp Marker
+      const topHl = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.08, 12), headlightBeamMat);
+      topHl.rotation.x = Math.PI / 2;
+      topHl.position.set(0, 3.52, 1.12);
+      cabGroup.add(topHl);
+
+      car.add(cabGroup);
+    }
+
+    // 2 Authentic Commuter Bogies with Flanged Steel Wheels
+    const frontBogie = createRealisticBogie();
+    frontBogie.position.set(0, 0, 5.2);
+    car.add(frontBogie);
+
+    const rearBogie = createRealisticBogie();
+    rearBogie.position.set(0, 0, -5.2);
+    car.add(rearBogie);
+
+    return car;
+  }
+
+  const regLeadCar = createRegionalCar(true);
+  const regTrailerCar = createRegionalCar(false);
+  regGroup.add(regLeadCar);
+  regGroup.add(regTrailerCar);
+
+  const regSpotLight = new THREE.SpotLight(0xfef08a, 4.0, 110, Math.PI / 7.5, 0.35, 1.1);
+  regSpotLight.position.set(0, 2.0, 9.5);
+  const regTarget = new THREE.Object3D();
+  regTarget.position.set(0, 0.4, 55);
+  regLeadCar.add(regSpotLight);
+  regLeadCar.add(regTarget);
+  regSpotLight.target = regTarget;
+
+  scene.add(regGroup);
+
+  // --- Simulation State Variables & Kinematic Constants ---
+  const START_Z = -280;          // Both trains start parallel at Z = -280
+  const CRUISE_REG_SPEED = 30;   // ~108 km/h parallel cruising speed
+  const CRUISE_HS2_SPEED = 32.5; // ~117 km/h parallel cruising speed
+  const TURNOUT_SPEED = 15.0;    // ~54 km/h safe turnout merge speed
+  const STOP_LINE_Z = -102;      // Stop position right before Signal HA-104 (stopSignalZ = -100)
+  const BRAKE_TRIGGER_Z = -125;  // Point where Regional 104 begins smooth deceleration
+  const PASS_COMPLETE_Z = 85;    // Point where Regional 104 fully merges onto mainline
+
+  let hs2Speed = CRUISE_HS2_SPEED;
+  let hs2Z = START_Z;
+  let regSpeed = CRUISE_REG_SPEED;
+  let regZ = START_Z;
+
+  let isStoppedAtSignal = false;
+  let totalDelayTime = 0;        // Integrated dynamic schedule delay
+  let haltDelayTime = 0;         // Time spent completely stationary at 0 km/h
+  let recordedFinalDelay = 0;    // Locks the incurred delay once clear
+  let liveDelayRate = 0;         // Current delay accumulation rate (s/s)
+  let hadOverrideInCycle = false;
+  let cycleCompleted = false;
+  let cycleCompleteTimer = 0;
+  let cycleCount = 1;
+  let cycleHistory = [];
+
+  let switchAlignment = 0;
+  let activeCameraMode = 'corridor'; // 'corridor', 'hazard', 'signal', 'station'
+  let isPaused = false;
+  let simTimeScale = 1.0;
+  let headlightsOn = true;
+  let timeOfDay = 0;
+
+  function resetOverrideButton() {
+    const btn = document.getElementById('btn-override-signal');
+    if (btn) {
+      btn.innerHTML = `<span>🚦</span> Allow Regional Train (Signal Override)`;
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.style.boxShadow = '';
+    }
+  }
+
+  function updateAggregateStats() {
+    const totalRuns = cycleHistory.length;
+    if (totalRuns === 0) {
+      const avgEl = document.getElementById('hud-avg-delay');
+      if (avgEl) avgEl.innerText = '0.0s';
+      const lastEl = document.getElementById('hud-last-delay');
+      if (lastEl) lastEl.innerText = '--';
+      const maxEl = document.getElementById('hud-max-delay');
+      if (maxEl) maxEl.innerText = '0.0s';
+
+      const sRuns = document.getElementById('stat-runs');
+      if (sRuns) sRuns.innerText = '0';
+      const sAvg = document.getElementById('stat-avg');
+      if (sAvg) sAvg.innerText = '0.0s';
+      const sPeak = document.getElementById('stat-peak');
+      if (sPeak) sPeak.innerText = '0.0s';
+      const sOnTime = document.getElementById('stat-ontime');
+      if (sOnTime) sOnTime.innerText = '100%';
+      return;
+    }
+
+    const delays = cycleHistory.map(c => c.delay);
+    const sum = delays.reduce((a, b) => a + b, 0);
+    const avg = sum / totalRuns;
+    const last = delays[totalRuns - 1];
+    const peak = Math.max(...delays);
+    const onTimeCount = cycleHistory.filter(c => c.delay < 5.0).length;
+    const onTimePct = Math.round((onTimeCount / totalRuns) * 100);
+
+    const avgEl = document.getElementById('hud-avg-delay');
+    if (avgEl) avgEl.innerText = `${avg.toFixed(1)}s`;
+    const lastEl = document.getElementById('hud-last-delay');
+    if (lastEl) lastEl.innerText = `${last.toFixed(1)}s`;
+    const maxEl = document.getElementById('hud-max-delay');
+    if (maxEl) maxEl.innerText = `${peak.toFixed(1)}s`;
+
+    const sRuns = document.getElementById('stat-runs');
+    if (sRuns) sRuns.innerText = `${totalRuns}`;
+    const sAvg = document.getElementById('stat-avg');
+    if (sAvg) sAvg.innerText = `${avg.toFixed(1)}s`;
+    const sPeak = document.getElementById('stat-peak');
+    if (sPeak) sPeak.innerText = `${peak.toFixed(1)}s`;
+    const sOnTime = document.getElementById('stat-ontime');
+    if (sOnTime) sOnTime.innerText = `${onTimePct}%`;
+  }
+
+  const btnClearStats = document.getElementById('btn-clear-stats');
+  if (btnClearStats) {
+    btnClearStats.onclick = () => {
+      cycleHistory = [];
+      updateAggregateStats();
+    };
+  }
+
+  const btnOverrideEl = document.getElementById('btn-override-signal');
+  if (btnOverrideEl) {
+    btnOverrideEl.onclick = () => {
+      state.forcedGreen = true;
+      hadOverrideInCycle = true;
+      btnOverrideEl.innerHTML = `<span>⚡</span> Override Engaged (Signal Cleared)`;
+      btnOverrideEl.style.background = 'linear-gradient(135deg, #0284c7, #0369a1)';
+      btnOverrideEl.style.borderColor = '#38bdf8';
+      btnOverrideEl.style.boxShadow = '0 0 16px rgba(56, 189, 248, 0.5)';
+    };
+  }
+
+  function resetSimulationCycle() {
+    // Dynamic starting position based on Priority Train Frequency
+    // Headway spacing varies from -370 (at 0%) to -190 (at 100%)
+    const freq = state.frequency ?? 50;
+    const headwayOffset = (freq - 50) * 1.8;
+    hs2Z = START_Z + headwayOffset;
+    regZ = START_Z;
+
+    hs2Speed = CRUISE_HS2_SPEED;
+    regSpeed = CRUISE_REG_SPEED;
+    isStoppedAtSignal = false;
+    totalDelayTime = 0;
+    haltDelayTime = 0;
+    recordedFinalDelay = 0;
+    liveDelayRate = 0;
+    cycleCompleted = false;
+    cycleCompleteTimer = 0;
+    state.forcedGreen = false;
+    hadOverrideInCycle = false;
+
+    resetOverrideButton();
+
+    const dockCycle = document.getElementById('hud-dock-cycle');
+    if (dockCycle) dockCycle.innerHTML = `CYCLE<br>#${cycleCount}`;
+    const pillCycle = document.getElementById('hud-pill-cycle');
+    if (pillCycle) pillCycle.innerText = `CYCLE #${cycleCount}`;
+  }
+
+  // Sound Synthesizer (Locomotive Dual-Tone Air Horn)
+  function soundTrainHorn() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc1.type = 'sawtooth';
+      osc2.type = 'sawtooth';
+      osc1.frequency.setValueAtTime(311.13, ctx.currentTime);
+      osc2.frequency.setValueAtTime(370.00, ctx.currentTime);
+
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.4);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc1.start();
+      osc2.start();
+      osc1.stop(ctx.currentTime + 1.4);
+      osc2.stop(ctx.currentTime + 1.4);
+    } catch (e) {}
+  }
+
+  // Camera Switcher (Corridor Map, Hazard Front, Station View, Signal View)
+  const camBtns = {
+    corridor: document.getElementById('cam-corridor'),
+    hazard: document.getElementById('cam-hazard'),
+    station: document.getElementById('cam-station')
+  };
+
+  function setCameraMode(mode) {
+    activeCameraMode = mode;
+    Object.keys(camBtns).forEach(k => {
+      if (camBtns[k]) {
+        if (k === mode) camBtns[k].classList.add('active');
+        else camBtns[k].classList.remove('active');
+      }
+    });
+    const btnTrack = document.getElementById('btn-track-layers');
+    if (btnTrack) btnTrack.classList.toggle('active', mode === 'signal');
+
+    controls.enabled = (mode === 'station');
+    if (mode === 'station') {
+      controls.target.set(8, 2, -15);
+      camera.position.set(-30, 18, -115);
+    } else if (mode === 'signal') {
+      camera.position.set(16, 4.2, -115);
+      camera.lookAt(8, 3.2, -75);
+    }
+  }
+
+  Object.keys(camBtns).forEach(k => {
+    if (camBtns[k]) {
+      camBtns[k].onclick = () => setCameraMode(k);
+    }
+  });
+
+  // Dock Buttons
+  const svgSun = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>';
+  const svgSunset = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><path d="M12 2v7"/><path d="m4.93 10.93 1.41 1.41"/><path d="m17.66 12.34 1.41-1.41"/><path d="M2 18h20"/><path d="M20 22H4"/></svg>';
+  const svgMoon = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>';
+
+  document.getElementById('btn-back').onclick = () => setCameraMode('corridor');
+  document.getElementById('btn-speedo').onclick = (e) => {
+    const speedCard = document.querySelector('.sim-card-speed');
+    const horizonPill = document.querySelector('.sim-pill-horizon');
+    const isHidden = speedCard.classList.toggle('hidden');
+    if (horizonPill) horizonPill.classList.toggle('hidden', isHidden);
+    e.currentTarget.classList.toggle('active', !isHidden);
+  };
+  document.getElementById('btn-track-layers').onclick = () => {
+    if (activeCameraMode === 'signal') {
+      setCameraMode('corridor');
+    } else {
+      setCameraMode('signal');
+    }
+  };
+  document.getElementById('btn-horn').onclick = soundTrainHorn;
+  document.getElementById('btn-headlight').onclick = (e) => {
+    headlightsOn = !headlightsOn;
+    hs2SpotLight.intensity = headlightsOn ? 4.8 : 0;
+    regSpotLight.intensity = headlightsOn ? 3.5 : 0;
+    e.currentTarget.classList.toggle('active', headlightsOn);
+  };
+  document.getElementById('btn-lighting').onclick = () => {
+    timeOfDay = (timeOfDay + 1) % 3;
+    const btnLight = document.getElementById('btn-lighting');
+    if (timeOfDay === 0) {
+      scene.background.set(0x87ceeb);
+      scene.fog.color.set(0x87ceeb);
+      hemiLight.intensity = 0.95;
+      sunLight.intensity = 1.35;
+      btnLight.innerHTML = svgSun;
+    } else if (timeOfDay === 1) {
+      scene.background.set(0xf97316);
+      scene.fog.color.set(0xf97316);
+      hemiLight.intensity = 0.65;
+      sunLight.intensity = 1.5;
+      btnLight.innerHTML = svgSunset;
+    } else {
+      scene.background.set(0x090d16);
+      scene.fog.color.set(0x090d16);
+      hemiLight.intensity = 0.25;
+      sunLight.intensity = 0.3;
+      btnLight.innerHTML = svgMoon;
+    }
+  };
+  document.getElementById('btn-weather').onclick = () => {
+    scene.fog.density = scene.fog.density > 0.002 ? 0.0013 : 0.006;
+  };
+  document.getElementById('btn-camera-angle').onclick = () => {
+    const modes = ['corridor', 'hazard', 'signal', 'station'];
+    const nextIdx = (modes.indexOf(activeCameraMode) + 1) % modes.length;
+    setCameraMode(modes[nextIdx]);
+  };
+
+  // Playback Buttons
+  const btnPause = document.getElementById('btn-pause');
+  btnPause.onclick = () => {
+    isPaused = !isPaused;
+    document.getElementById('icon-pause').innerText = isPaused ? '▶' : '⏸';
+    document.getElementById('text-pause').innerText = isPaused ? 'Resume' : 'Pause';
+  };
+
+  document.getElementById('btn-reset').onclick = () => {
+    resetSimulationCycle();
+  };
+
+  const btnSpeed = document.getElementById('btn-speed');
+  const btnSpeed2x = document.getElementById('btn-speed-2x');
+  btnSpeed.onclick = () => {
+    simTimeScale = 1.0;
+    btnSpeed.classList.add('active');
+    btnSpeed2x.classList.remove('active');
+  };
+  btnSpeed2x.onclick = () => {
+    simTimeScale = 2.0;
+    btnSpeed2x.classList.add('active');
+    btnSpeed.classList.remove('active');
+  };
+
+  // Responsive Resize
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // Animation Loop
+  let lastTime = performance.now();
+
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const rawDt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+    if (isPaused) {
+      renderer.render(scene, camera);
+      return;
+    }
+
+    const dt = rawDt * simTimeScale;
+
+    // --- Core Train Interlocking & Signal Logic ---
+    const speedVal = state.speed ?? 50;
+    const freqVal = state.frequency ?? 50;
+
+    // Dynamic HS2 Target Speed (150 to 260 km/h) based on Speed Slider
+    const hs2TargetSpeedKmh = Math.round(150 + (speedVal / 100) * 110);
+    const hs2PriorityTargetSpeed = hs2TargetSpeedKmh / 3.6;
+
+    // Dynamic Headway Safety Clearance Margin based on Frequency Slider (15m to 50m)
+    const clearanceMargin = 15 + (freqVal / 100) * 35;
+
+    // Priority Approach Reservation Threshold
+    // If frequency is low, HS2 reservation triggers later, granting Regional 104 free crossing
+    const approachLockZ = -150 - (100 - freqVal) * 0.8;
+
+    let isSignalGreen = false;
+    if (state.forcedGreen) {
+      isSignalGreen = true;
+    } else if (hs2Z < approachLockZ && regZ >= BRAKE_TRIGGER_Z) {
+      // Priority train is still far back (low traffic density); signal clears for regional passage
+      isSignalGreen = true;
+    } else {
+      // Priority train holds interlocking reservation until clearing switch + safety block margin
+      isSignalGreen = (hs2Z >= switchEndZ + clearanceMargin);
+    }
+
+    if (state.forcedGreen && regZ > switchEndZ + 25) {
+      state.forcedGreen = false;
+      resetOverrideButton();
+    }
+
+    // Dynamic Signal HA-104 Visual Optics
+    if (isSignalGreen) {
+      redLensMat.color.set(0x450a0a);
+      greenLensMat.color.set(0x22c55e);
+      signalLight.color.set(0x22c55e);
+    } else {
+      redLensMat.color.set(0xef4444);
+      greenLensMat.color.set(0x052e16);
+      signalLight.color.set(0xef4444);
+    }
+
+    // Switch Points Alignment
+    const targetSwitch = (isSignalGreen || (regZ > switchStartZ - 10 && regZ < switchEndZ + 20)) ? 1 : 0;
+    switchAlignment += (targetSwitch - switchAlignment) * Math.min(1, dt * 5);
+    switchBlade.rotation.y = switchAlignment * -0.06;
+
+    // --- 1. Secondary Train (Regional 104) Kinematics & Dynamic Delay Accumulation ---
+    if (!cycleCompleted) {
+      if (isSignalGreen) {
+        // Route is clear (either free flow, signal turned green, or manual override)
+        if (regZ < BRAKE_TRIGGER_Z) {
+          regSpeed = CRUISE_REG_SPEED;
+          regZ += regSpeed * dt;
+          isStoppedAtSignal = false;
+          liveDelayRate = 0;
+        } else if (isStoppedAtSignal) {
+          // Accelerating from complete halt at Signal HA-104
+          isStoppedAtSignal = false;
+          if (recordedFinalDelay === 0 && totalDelayTime > 0) {
+            recordedFinalDelay = totalDelayTime;
+          }
+          regSpeed = Math.min(TURNOUT_SPEED, regSpeed + 8.5 * dt);
+          regZ += regSpeed * dt;
+          const loss = Math.max(0, (TURNOUT_SPEED - regSpeed) / TURNOUT_SPEED) * 0.4;
+          totalDelayTime += loss * dt;
+          liveDelayRate = loss;
+        } else if (regZ < STOP_LINE_Z && regSpeed < TURNOUT_SPEED) {
+          // Was decelerating, now accelerates smoothly to turnout merge speed
+          isStoppedAtSignal = false;
+          regSpeed = Math.min(TURNOUT_SPEED, regSpeed + 8.5 * dt);
+          regZ += regSpeed * dt;
+          const loss = Math.max(0, (TURNOUT_SPEED - regSpeed) / TURNOUT_SPEED) * 0.4;
+          totalDelayTime += loss * dt;
+          liveDelayRate = loss;
+        } else {
+          // Free running through turnout crossover
+          isStoppedAtSignal = false;
+          if (recordedFinalDelay === 0 && totalDelayTime > 0) {
+            recordedFinalDelay = totalDelayTime;
+          }
+          regSpeed = TURNOUT_SPEED;
+          regZ += regSpeed * dt;
+          liveDelayRate = 0;
+        }
+      } else {
+        // Signal HA-104 is RED
+        if (regZ < BRAKE_TRIGGER_Z) {
+          regSpeed = CRUISE_REG_SPEED;
+          regZ += regSpeed * dt;
+          isStoppedAtSignal = false;
+          liveDelayRate = 0;
+        } else if (regZ < STOP_LINE_Z) {
+          // Decelerating smoothly for red signal
+          const distToStop = STOP_LINE_Z - regZ;
+          if (distToStop > 0.4) {
+            regSpeed = Math.max(0, Math.min(regSpeed, Math.sqrt(2 * 18 * distToStop)));
+            regZ += regSpeed * dt;
+            isStoppedAtSignal = false;
+            const loss = Math.max(0, (CRUISE_REG_SPEED - regSpeed) / CRUISE_REG_SPEED);
+            totalDelayTime += loss * dt;
+            liveDelayRate = loss;
+          } else {
+            // Fully halted at Signal HA-104
+            regSpeed = 0;
+            regZ = STOP_LINE_Z;
+            isStoppedAtSignal = true;
+            haltDelayTime += dt;
+            totalDelayTime += dt;
+            liveDelayRate = 1.0;
+          }
+        } else {
+          // Fully stopped and waiting at red signal
+          regSpeed = 0;
+          regZ = STOP_LINE_Z;
+          isStoppedAtSignal = true;
+          haltDelayTime += dt;
+          totalDelayTime += dt;
+          liveDelayRate = 1.0;
+        }
+      }
+    } else {
+      // Cycle completed, cruising on mainline
+      regSpeed = TURNOUT_SPEED;
+      regZ += regSpeed * dt;
+      liveDelayRate = 0;
+    }
+
+    // --- 2. Priority Train (HS2 Bullet Train) Kinematics ---
+    if (regZ < BRAKE_TRIGGER_Z) {
+      hs2Speed = CRUISE_HS2_SPEED;
+    } else {
+      hs2Speed = Math.min(hs2PriorityTargetSpeed, hs2Speed + 26 * dt);
+    }
+    hs2Z += hs2Speed * dt;
+    hs2Group.position.set(0, 0, hs2Z);
+
+    const hs2SpeedKmh = Math.round(hs2Speed * 3.6);
+    const regSpeedKmh = Math.round(regSpeed * 3.6);
+
+    // Regional Train 3D Multi-Car Articulation along turnout curve
+    const pLead = getBranchPose(regZ);
+    regLeadCar.position.set(pLead.x, pLead.y, pLead.z);
+    regLeadCar.rotation.y = pLead.angle;
+
+    const pTrailer = getBranchPose(regZ - 18);
+    regTrailerCar.position.set(pTrailer.x, pTrailer.y, pTrailer.z);
+    regTrailerCar.rotation.y = pTrailer.angle;
+
+    // --- 3. Cycle Completion & Dynamic Results History Tracking ---
+    if (!cycleCompleted && regZ >= PASS_COMPLETE_Z) {
+      cycleCompleted = true;
+      cycleCompleteTimer = 0;
+      if (recordedFinalDelay === 0) recordedFinalDelay = totalDelayTime;
+
+      cycleHistory.push({
+        cycle: cycleCount,
+        delay: recordedFinalDelay,
+        halt: haltDelayTime,
+        freq: state.frequency,
+        speed: state.speed,
+        override: hadOverrideInCycle
+      });
+      updateAggregateStats();
+    }
+
+    if (cycleCompleted) {
+      cycleCompleteTimer += dt;
+      if (cycleCompleteTimer >= 1.8) {
+        cycleCount++;
+        resetSimulationCycle();
+      }
+    }
+
+    // --- Dynamic Camera Framing ---
+    if (activeCameraMode === 'corridor') {
+      camera.position.set(-22, 65, -150);
+      camera.lookAt(8, 0, -65);
+    } else if (activeCameraMode === 'hazard') {
+      camera.position.set(22, 5.5, -135);
+      camera.lookAt(12, 2.6, -75);
+    } else if (activeCameraMode === 'signal') {
+      camera.position.set(16, 4.2, -115);
+      camera.lookAt(8, 3.2, -75);
+    } else if (activeCameraMode === 'station') {
+      controls.update();
+    }
+
+    // --- Telemetry HUD Speed Displays ---
+    document.getElementById('hud-speed-val').innerText = regSpeedKmh;
+
+    let regTag = "PARALLEL APPROACH TO JUNCTION";
+    let regBadge = `PARALLEL: ${regSpeedKmh} KM/H`;
+    if (cycleCompleted) {
+      regTag = "PASS COMPLETED (ZERO COLLISION)";
+      regBadge = "COMPLETED";
+    } else if (isStoppedAtSignal) {
+      regTag = "WAITING AT RED SIGNAL HA-104";
+      regBadge = "REG: WAITING (0 KM/H)";
+    } else if (regZ >= BRAKE_TRIGGER_Z && !isSignalGreen) {
+      regTag = "BRAKING FOR RED SIGNAL HA-104";
+      regBadge = `BRAKING: ${regSpeedKmh} KM/H`;
+    } else if (isSignalGreen && regZ > STOP_LINE_Z) {
+      regTag = `TURNOUT MERGE (${regSpeedKmh} KM/H)`;
+      regBadge = `TURNOUT: ${regSpeedKmh} KM/H`;
+    }
+    document.getElementById('hud-mps-badge').innerText = regBadge;
+    document.getElementById('hud-speed-tag').innerText = regTag;
+
+    // Dual Comparative Telemetry
+    document.getElementById('hud-hs2-val').innerText = `${hs2SpeedKmh} KM/H`;
+    document.getElementById('hud-reg-val').innerText = `${regSpeedKmh} KM/H`;
+    document.getElementById('hud-reg-badge').innerText = isStoppedAtSignal ? "WAITING (0 KM/H)" : (regZ < BRAKE_TRIGGER_Z ? "PARALLEL CRUISE" : `SPEED (${regSpeedKmh} KM/H)`);
+
+    // Comparative Visual Bars (260 km/h scale)
+    const hs2BarPct = Math.min(100, Math.max(10, (hs2SpeedKmh / 260) * 100));
+    const regBarPct = isStoppedAtSignal ? 0 : Math.min(100, (regSpeedKmh / 260) * 100);
+    document.getElementById('hud-bar-hs2').style.width = `${hs2BarPct}%`;
+    document.getElementById('hud-bar-reg').style.width = `${regBarPct}%`;
+
+    // Dynamic Corridor Km Mark and Progress Fill
+    const progressFraction = Math.min(1, Math.max(0, (regZ - START_Z) / (PASS_COMPLETE_Z - START_Z)));
+    const currentKm = (36.2 + progressFraction * 3.2).toFixed(2);
+    const zoneName = regZ < -110 ? "Approach" : (regZ < 30 ? "Turnout Zone" : "Mainline Merged");
+    document.getElementById('hud-km-mark').innerText = `Km ${currentKm} / ${zoneName}`;
+    document.getElementById('hud-track-progress-fill').style.width = `${(progressFraction * 100).toFixed(1)}%`;
+
+    // Active Delay Counter Formatting
+    const currentDelay = (cycleCompleted || (isSignalGreen && recordedFinalDelay > 0)) ? recordedFinalDelay : totalDelayTime;
+    const mins = Math.floor(currentDelay / 60);
+    const secs = (currentDelay % 60).toFixed(1);
+    const delayStr = `${mins < 10 ? '0' : ''}${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
+    document.getElementById('hud-delay-num').innerText = delayStr;
+
+    // Live Delay Rate Badge
+    const rateBadge = document.getElementById('hud-delay-rate');
+    if (rateBadge) {
+      if (liveDelayRate >= 0.8) {
+        rateBadge.className = 'sim-delay-rate-badge accumulating';
+        rateBadge.innerText = '+1.0s/s';
+      } else if (liveDelayRate > 0.05) {
+        rateBadge.className = 'sim-delay-rate-badge accumulating';
+        rateBadge.innerText = `+${liveDelayRate.toFixed(1)}s/s`;
+      } else {
+        rateBadge.className = 'sim-delay-rate-badge steady';
+        rateBadge.innerText = '0.0s/s';
+      }
+    }
+
+    // Interlocking Status Banner & Card Styling
+    const pillStatus = document.getElementById('hud-pill-status');
+    const desc = document.getElementById('hud-alert-desc');
+    const alertCard = document.getElementById('hud-alert-card');
+    const alertIcon = document.getElementById('hud-alert-icon');
+    const delaySub = document.getElementById('hud-delay-sub');
+
+    if (cycleCompleted) {
+      pillStatus.className = 'sim-alert-badge';
+      pillStatus.style.background = '#065f46';
+      pillStatus.style.color = '#6ee7b7';
+      pillStatus.style.border = '1px solid #10b981';
+      pillStatus.innerText = `CYCLE COMPLETE • SAFE PASSAGE • RESETTING IN ${Math.max(0, 1.8 - cycleCompleteTimer).toFixed(1)}s`;
+      desc.innerText = `Both trains safely cleared Handsacre Junction with zero collision. Total delay: ${delayStr}. Auto-repeating next cycle...`;
+      alertCard.style.borderColor = '#10b981';
+      alertCard.style.boxShadow = '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(16, 185, 129, 0.35)';
+      alertIcon.style.background = 'rgba(16, 185, 129, 0.18)';
+      alertIcon.style.borderColor = 'rgba(16, 185, 129, 0.45)';
+      alertIcon.innerText = '✅';
+      delaySub.innerText = 'Pass Complete (Zero Collision)';
+    } else if (regZ < BRAKE_TRIGGER_Z) {
+      pillStatus.className = 'sim-alert-badge';
+      pillStatus.style.background = '#0369a1';
+      pillStatus.style.color = '#e0f2fe';
+      pillStatus.style.border = '1px solid #38bdf8';
+      pillStatus.innerText = `PARALLEL RUN (${regSpeedKmh} KM/H) • APPROACHING CROSSING`;
+      desc.innerText = `Both trains running parallel side-by-side on adjacent tracks towards Handsacre Crossover.`;
+      alertCard.style.borderColor = '#38bdf8';
+      alertCard.style.boxShadow = '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.35)';
+      alertIcon.style.background = 'rgba(56, 189, 248, 0.18)';
+      alertIcon.style.borderColor = 'rgba(56, 189, 248, 0.45)';
+      alertIcon.innerText = '🚅';
+      delaySub.innerText = 'On Schedule (Parallel)';
+    } else if (!isSignalGreen) {
+      pillStatus.className = 'sim-alert-badge sim-badge-warn';
+      pillStatus.style.background = '';
+      pillStatus.style.color = '';
+      pillStatus.style.border = '';
+      pillStatus.innerText = `PRIORITY PASS (${hs2SpeedKmh} KM/H) • SIGNAL HA-104 DANGER`;
+      desc.innerText = isStoppedAtSignal
+        ? `Regional Train 104 halted at Signal HA-104 (0 km/h). Delay accumulating dynamically while Priority HS2 clears junction.`
+        : `Regional Train 104 braking for Signal HA-104. Priority HS2 accelerating to pass crossing.`;
+      alertCard.style.borderColor = '#d97706';
+      alertCard.style.boxShadow = '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(217, 119, 6, 0.35)';
+      alertIcon.style.background = 'rgba(217, 119, 6, 0.18)';
+      alertIcon.style.borderColor = 'rgba(217, 119, 6, 0.45)';
+      alertIcon.innerText = '⚡';
+      delaySub.innerText = isStoppedAtSignal ? '🔴 Delay Accumulating (Halted)' : '🟠 Braking for Signal';
+    } else {
+      pillStatus.className = 'sim-alert-badge';
+      pillStatus.style.background = '#14532d';
+      pillStatus.style.color = '#86efac';
+      pillStatus.style.border = '1px solid #22c55e';
+      pillStatus.innerText = state.forcedGreen ? 'OVERRIDE ROUTE CLEARED' : 'SIGNAL HA-104 GREEN • REGIONAL MERGING';
+      desc.innerText = `Priority HS2 cleared junction! Signal HA-104: GREEN. Regional 104 crossing turnout (${regSpeedKmh} km/h). Delay locked: ${delayStr}.`;
+      alertCard.style.borderColor = '#22c55e';
+      alertCard.style.boxShadow = '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(34, 197, 94, 0.35)';
+      alertIcon.style.background = 'rgba(34, 197, 94, 0.18)';
+      alertIcon.style.borderColor = 'rgba(34, 197, 94, 0.45)';
+      alertIcon.innerText = '🟢';
+      delaySub.innerText = `Total Delay: ${delayStr}`;
+    }
+
+    // Synchronize Editorial HUD
+    let statusText = "Proceeding on Main";
+    let statusColor = "--success";
+    if (cycleCompleted) {
+      statusText = "Pass Completed";
+      statusColor = "--success";
+    } else if (isStoppedAtSignal) {
+      statusText = "Waiting at Junction Signal (0 km/h)";
+      statusColor = "--error";
+    } else if (regZ < BRAKE_TRIGGER_Z) {
+      statusText = "Parallel Running on Branch";
+      statusColor = "--primary";
+    } else if (regZ < switchEndZ) {
+      statusText = "Crossing Crossover Switch";
+      statusColor = "--warning";
+    }
+
+    ui.setEditorial({
+      hud: [
+        { label: "Regional Train (104)", value: statusText, color: statusColor },
+        { label: "Delay Duration", value: delayStr, color: totalDelayTime > 0 ? "--error" : "--on-surface-default" }
+      ]
+    });
+
+    renderer.render(scene, camera);
+  }
+
+  requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>
